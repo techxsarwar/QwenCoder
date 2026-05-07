@@ -1,6 +1,7 @@
 import os
 import requests
 import asyncio
+import datetime
 
 from telegram import (
     Update,
@@ -43,14 +44,37 @@ Help users with:
 - Websites
 - Debugging
 
-Always provide clean, modern and complete code.
+Always provide complete and clean code.
 """
 
 # =========================================
-# MEMORY
+# STORAGE
 # =========================================
 
 user_memory = {}
+user_stats = {}
+
+# =========================================
+# HELPER FUNCTIONS
+# =========================================
+
+def get_user_stats(user_id):
+
+    if user_id not in user_stats:
+
+        user_stats[user_id] = {
+            "messages": 0,
+            "joined": str(datetime.date.today())
+        }
+
+    return user_stats[user_id]
+
+
+def reset_memory(user_id):
+
+    if user_id in user_memory:
+        del user_memory[user_id]
+
 
 # =========================================
 # AI REQUEST
@@ -67,7 +91,6 @@ def ask_qwen(user_id, prompt):
             }
         ]
 
-    # Add user message
     user_memory[user_id].append(
         {
             "role": "user",
@@ -97,7 +120,6 @@ def ask_qwen(user_id, prompt):
 
         ai_reply = data["choices"][0]["message"]["content"]
 
-        # Save AI response
         user_memory[user_id].append(
             {
                 "role": "assistant",
@@ -121,7 +143,7 @@ def ask_qwen(user_id, prompt):
 
 
 # =========================================
-# LONG MESSAGE HANDLER
+# LONG MESSAGE
 # =========================================
 
 async def send_long_message(update, text):
@@ -135,18 +157,17 @@ async def send_long_message(update, text):
 
     for chunk in chunks:
 
-        await update.message.reply_text(
-            chunk
-        )
+        await update.message.reply_text(chunk)
 
 
 # =========================================
-# START COMMAND
+# START
 # =========================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
+
         [
             InlineKeyboardButton(
                 "👨‍💻 Help",
@@ -166,6 +187,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
 
             InlineKeyboardButton(
+                "📊 Stats",
+                callback_data="stats"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
                 "📡 Status",
                 callback_data="status"
             )
@@ -175,17 +203,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     text = """
-👋 Welcome to Qwen Coder Bot
+🚀 Welcome to Qwen Coder Bot
 
-🚀 Advanced AI Coding Assistant
+🤖 AI Coding Assistant
 
-💡 Ask me anything:
-• Build websites
-• Create APIs
-• Make Telegram bots
-• Fix coding bugs
-• Generate HTML/CSS/JS
-• Python & AI help
+✨ Features:
+• AI Memory
+• Website Generator
+• API Builder
+• Bug Fixing
+• Telegram Bot Maker
+• HTML/CSS/JS Generator
+
+💡 Just send your coding question directly.
 """
 
     await update.message.reply_text(
@@ -195,7 +225,49 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================================
-# BUTTONS
+# COMMANDS
+# =========================================
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    text = """
+💡 HOW TO USE
+
+Examples:
+
+• Build a modern portfolio website
+• Create Python API
+• Make login page
+• Fix JavaScript error
+• Create Telegram bot
+• Generate dashboard UI
+
+Just type naturally.
+"""
+
+    await update.message.reply_text(text)
+
+
+async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    await update.message.reply_text(
+        "🏓 Pong! Bot is alive."
+    )
+
+
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.effective_user.id
+
+    reset_memory(user_id)
+
+    await update.message.reply_text(
+        "🧹 Conversation memory cleared."
+    )
+
+
+# =========================================
+# BUTTON HANDLER
 # =========================================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -210,16 +282,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.message.reply_text(
             """
-💡 HOW TO USE
+💡 HELP MENU
 
-Just send your coding question directly.
+Send coding prompts naturally.
 
-Examples:
-• Build a login page
-• Create weather API
-• Fix Python error
-• Make Telegram bot
-• Generate portfolio website
+Example:
+Build me a Netflix clone homepage.
 """
         )
 
@@ -229,13 +297,12 @@ Examples:
             """
 🔥 FEATURES
 
-✅ AI Memory
-✅ Coding Assistant
+✅ AI Chat Memory
+✅ Long Code Support
 ✅ Website Generator
-✅ API Builder
-✅ Telegram Bot Maker
+✅ API Generator
 ✅ Debugging
-✅ Long Response Support
+✅ Telegram Bot Builder
 ✅ Multi-language Coding
 """
         )
@@ -248,12 +315,23 @@ Examples:
 
     elif query.data == "clear":
 
-        if user_id in user_memory:
-
-            del user_memory[user_id]
+        reset_memory(user_id)
 
         await query.message.reply_text(
-            "🧹 Memory Cleared Successfully!"
+            "🧹 Memory Cleared Successfully."
+        )
+
+    elif query.data == "stats":
+
+        stats = get_user_stats(user_id)
+
+        await query.message.reply_text(
+            f"""
+📊 YOUR STATS
+
+🧠 Messages: {stats['messages']}
+📅 Joined: {stats['joined']}
+"""
         )
 
 
@@ -266,6 +344,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
 
     user_id = update.effective_user.id
+
+    stats = get_user_stats(user_id)
+
+    stats["messages"] += 1
 
     try:
 
@@ -299,7 +381,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def error_handler(update, context):
 
-    print(f"Error: {context.error}")
+    print(f"ERROR: {context.error}")
 
 
 # =========================================
@@ -310,14 +392,18 @@ async def main():
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(
-        CommandHandler("start", start)
-    )
+    # Commands
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("ping", ping))
+    app.add_handler(CommandHandler("clear", clear_command))
 
+    # Buttons
     app.add_handler(
         CallbackQueryHandler(button_handler)
     )
 
+    # Messages
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -333,7 +419,9 @@ async def main():
 
     await app.start()
 
-    await app.updater.start_polling()
+    await app.updater.start_polling(
+        drop_pending_updates=True
+    )
 
     while True:
         await asyncio.sleep(3600)
