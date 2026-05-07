@@ -1,6 +1,6 @@
 import os
 import requests
-from dotenv import load_dotenv
+import asyncio
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -9,8 +9,6 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-
-load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 QWEN_API_KEY = os.getenv("QWEN_API_KEY")
@@ -30,7 +28,7 @@ def ask_qwen(prompt):
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are Qwen Coder Bot, an expert coding assistant."
+                    "content": "You are Qwen Coder Bot."
                 },
                 {
                     "role": "user",
@@ -49,14 +47,14 @@ def ask_qwen(prompt):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Welcome to Qwen Coder Bot!"
+        "👋 Qwen Coder Bot Online!"
     )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_text = update.message.text
 
-    thinking = await update.message.reply_text("⚡ Thinking...")
+    msg = await update.message.reply_text("⚡ Thinking...")
 
     try:
         answer = ask_qwen(user_text)
@@ -65,13 +63,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for i in range(0, len(answer), 4000):
                 await update.message.reply_text(answer[i:i+4000])
         else:
-            await thinking.edit_text(answer)
+            await msg.edit_text(answer)
 
     except Exception as e:
-        await thinking.edit_text(f"Error: {str(e)}")
+        await msg.edit_text(f"Error: {str(e)}")
 
 
-def main():
+async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -84,8 +82,13 @@ def main():
     )
 
     print("Bot running...")
-    app.run_polling()
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    while True:
+        await asyncio.sleep(3600)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
