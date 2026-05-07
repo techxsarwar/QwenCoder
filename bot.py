@@ -19,9 +19,9 @@ from telegram.ext import (
     filters,
 )
 
-# =========================
+# =========================================
 # CONFIG
-# =========================
+# =========================================
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 QWEN_API_KEY = os.getenv("QWEN_API_KEY")
@@ -43,15 +43,37 @@ Help users with:
 - Websites
 - Debugging
 
-Always provide clean and complete code.
+Always provide clean, modern and complete code.
 """
 
+# =========================================
+# MEMORY
+# =========================================
 
-# =========================
+user_memory = {}
+
+# =========================================
 # AI REQUEST
-# =========================
+# =========================================
 
-def ask_qwen(prompt):
+def ask_qwen(user_id, prompt):
+
+    if user_id not in user_memory:
+
+        user_memory[user_id] = [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            }
+        ]
+
+    # Add user message
+    user_memory[user_id].append(
+        {
+            "role": "user",
+            "content": prompt
+        }
+    )
 
     response = requests.post(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -61,16 +83,7 @@ def ask_qwen(prompt):
         },
         json={
             "model": MODEL,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
+            "messages": user_memory[user_id],
             "temperature": 0.7,
             "max_tokens": 4000,
             "stream": False
@@ -81,15 +94,35 @@ def ask_qwen(prompt):
     data = response.json()
 
     try:
-        return data["choices"][0]["message"]["content"]
+
+        ai_reply = data["choices"][0]["message"]["content"]
+
+        # Save AI response
+        user_memory[user_id].append(
+            {
+                "role": "assistant",
+                "content": ai_reply
+            }
+        )
+
+        # Keep memory optimized
+        if len(user_memory[user_id]) > 20:
+
+            user_memory[user_id] = (
+                [user_memory[user_id][0]] +
+                user_memory[user_id][-19:]
+            )
+
+        return ai_reply
 
     except:
+
         return str(data)
 
 
-# =========================
-# LONG MESSAGE SENDER
-# =========================
+# =========================================
+# LONG MESSAGE HANDLER
+# =========================================
 
 async def send_long_message(update, text):
 
@@ -107,9 +140,9 @@ async def send_long_message(update, text):
         )
 
 
-# =========================
-# START
-# =========================
+# =========================================
+# START COMMAND
+# =========================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -128,6 +161,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         [
             InlineKeyboardButton(
+                "🧹 Clear Memory",
+                callback_data="clear"
+            ),
+
+            InlineKeyboardButton(
                 "📡 Status",
                 callback_data="status"
             )
@@ -136,35 +174,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    welcome_text = """
+    text = """
 👋 Welcome to Qwen Coder Bot
 
-🚀 Your AI Coding Assistant
+🚀 Advanced AI Coding Assistant
 
-💡 Ask me:
+💡 Ask me anything:
 • Build websites
-• Fix errors
 • Create APIs
 • Make Telegram bots
+• Fix coding bugs
 • Generate HTML/CSS/JS
-• Python help
+• Python & AI help
 """
 
     await update.message.reply_text(
-        welcome_text,
+        text,
         reply_markup=reply_markup
     )
 
 
-# =========================
+# =========================================
 # BUTTONS
-# =========================
+# =========================================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
 
     await query.answer()
+
+    user_id = query.from_user.id
 
     if query.data == "help":
 
@@ -189,11 +229,11 @@ Examples:
             """
 🔥 FEATURES
 
+✅ AI Memory
 ✅ Coding Assistant
 ✅ Website Generator
 ✅ API Builder
 ✅ Telegram Bot Maker
-✅ AI App Creator
 ✅ Debugging
 ✅ Long Response Support
 ✅ Multi-language Coding
@@ -206,14 +246,26 @@ Examples:
             "✅ Bot Status: ONLINE"
         )
 
+    elif query.data == "clear":
 
-# =========================
+        if user_id in user_memory:
+
+            del user_memory[user_id]
+
+        await query.message.reply_text(
+            "🧹 Memory Cleared Successfully!"
+        )
+
+
+# =========================================
 # MESSAGE HANDLER
-# =========================
+# =========================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_text = update.message.text
+
+    user_id = update.effective_user.id
 
     try:
 
@@ -222,7 +274,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action=ChatAction.TYPING
         )
 
-        answer = ask_qwen(user_text)
+        answer = ask_qwen(user_id, user_text)
 
         if not answer:
 
@@ -241,24 +293,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# =========================
+# =========================================
 # ERROR HANDLER
-# =========================
+# =========================================
 
 async def error_handler(update, context):
 
     print(f"Error: {context.error}")
 
 
-# =========================
+# =========================================
 # MAIN
-# =========================
+# =========================================
 
 async def main():
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
+    app.add_handler(
+        CommandHandler("start", start)
+    )
 
     app.add_handler(
         CallbackQueryHandler(button_handler)
