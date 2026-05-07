@@ -8,6 +8,8 @@ from telegram import (
     InlineKeyboardMarkup,
 )
 
+from telegram.constants import ChatAction
+
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -17,6 +19,10 @@ from telegram.ext import (
     filters,
 )
 
+# =========================
+# CONFIG
+# =========================
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 QWEN_API_KEY = os.getenv("QWEN_API_KEY")
 
@@ -24,8 +30,20 @@ MODEL = "qwen/qwen-2.5-coder-32b-instruct"
 
 SYSTEM_PROMPT = """
 You are Qwen Coder Bot.
-You are an expert coding assistant.
-Help users with coding, websites, APIs, debugging and AI.
+
+You are an advanced AI coding assistant.
+
+Help users with:
+- Python
+- JavaScript
+- HTML/CSS
+- APIs
+- Telegram Bots
+- AI Apps
+- Websites
+- Debugging
+
+Always provide clean and complete code.
 """
 
 
@@ -54,29 +72,35 @@ def ask_qwen(prompt):
                 }
             ],
             "temperature": 0.7,
-            "max_tokens": 2000,
+            "max_tokens": 4000,
+            "stream": False
         },
-        timeout=120,
+        timeout=180,
     )
 
     data = response.json()
 
     try:
         return data["choices"][0]["message"]["content"]
+
     except:
         return str(data)
 
 
 # =========================
-# MESSAGE SPLITTER
+# LONG MESSAGE SENDER
 # =========================
 
 async def send_long_message(update, text):
 
     chunk_size = 3500
 
-    for i in range(0, len(text), chunk_size):
-        chunk = text[i:i + chunk_size]
+    chunks = [
+        text[i:i + chunk_size]
+        for i in range(0, len(text), chunk_size)
+    ]
+
+    for chunk in chunks:
 
         await update.message.reply_text(
             chunk
@@ -97,14 +121,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
 
             InlineKeyboardButton(
-                "🧠 Features",
+                "🔥 Features",
                 callback_data="features"
             )
         ],
 
         [
             InlineKeyboardButton(
-                "🚀 Status",
+                "📡 Status",
                 callback_data="status"
             )
         ]
@@ -112,14 +136,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    welcome_text = """
+👋 Welcome to Qwen Coder Bot
+
+🚀 Your AI Coding Assistant
+
+💡 Ask me:
+• Build websites
+• Fix errors
+• Create APIs
+• Make Telegram bots
+• Generate HTML/CSS/JS
+• Python help
+"""
+
     await update.message.reply_text(
-        "👋 Welcome to Qwen Coder Bot!\n\nSend me any coding question.",
+        welcome_text,
         reply_markup=reply_markup
     )
 
 
 # =========================
-# BUTTON HANDLER
+# BUTTONS
 # =========================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -131,13 +169,35 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "help":
 
         await query.message.reply_text(
-            "💡 Just send coding questions directly.\n\nExamples:\n- Build a login page\n- Fix Python error\n- Create API"
+            """
+💡 HOW TO USE
+
+Just send your coding question directly.
+
+Examples:
+• Build a login page
+• Create weather API
+• Fix Python error
+• Make Telegram bot
+• Generate portfolio website
+"""
         )
 
     elif query.data == "features":
 
         await query.message.reply_text(
-            "🔥 Features:\n\n• Coding Help\n• Debugging\n• API Building\n• Website Generation\n• AI Assistance"
+            """
+🔥 FEATURES
+
+✅ Coding Assistant
+✅ Website Generator
+✅ API Builder
+✅ Telegram Bot Maker
+✅ AI App Creator
+✅ Debugging
+✅ Long Response Support
+✅ Multi-language Coding
+"""
         )
 
     elif query.data == "status":
@@ -155,23 +215,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_text = update.message.text
 
-    thinking = await update.message.reply_text(
-        "⚡ Thinking..."
-    )
-
     try:
+
+        await context.bot.send_chat_action(
+            chat_id=update.effective_chat.id,
+            action=ChatAction.TYPING
+        )
 
         answer = ask_qwen(user_text)
 
-        await thinking.delete()
+        if not answer:
+
+            await update.message.reply_text(
+                "❌ Empty response from AI."
+            )
+
+            return
 
         await send_long_message(update, answer)
 
     except Exception as e:
 
-        await thinking.edit_text(
+        await update.message.reply_text(
             f"❌ Error:\n{str(e)}"
         )
+
+
+# =========================
+# ERROR HANDLER
+# =========================
+
+async def error_handler(update, context):
+
+    print(f"Error: {context.error}")
 
 
 # =========================
@@ -184,7 +260,9 @@ async def main():
 
     app.add_handler(CommandHandler("start", start))
 
-    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(
+        CallbackQueryHandler(button_handler)
+    )
 
     app.add_handler(
         MessageHandler(
@@ -193,10 +271,14 @@ async def main():
         )
     )
 
-    print("✅ Bot running...")
+    app.add_error_handler(error_handler)
+
+    print("✅ Qwen Coder Bot Running...")
 
     await app.initialize()
+
     await app.start()
+
     await app.updater.start_polling()
 
     while True:
